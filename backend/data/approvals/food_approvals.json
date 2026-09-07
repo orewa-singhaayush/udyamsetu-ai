@@ -1,0 +1,96 @@
+[
+  {
+    "approval_name": "FSSAI Registration / License",
+    "authority": "FSSAI",
+    "business_types": [
+      "dairy",
+      "paneer",
+      "milk_processing",
+      "bakery",
+      "restaurant",
+      "food_manufacturing"
+    ],
+    "applicability": "food_business",
+    "conditions": [
+      "Applicable to Food Business Operators",
+      "The applicable registration or license depends on the nature and circumstances of the food business"
+    ],
+    "documents": [],
+    "source": "FSSAI",
+    "status": "verify"
+  },
+  {
+    "approval_name": "GST Registration",
+    "authority": "GST Authorities",
+    "business_types": [
+      "dairy",
+      "paneer",
+      "milk_processing",
+      "bakery",
+      "restaurant",
+      "food_manufacturing"
+    ],
+    "applicability": "conditional",
+    "conditions": [
+      "May apply depending on applicable GST registration requirements"
+    ],
+    "documents": [],
+    "source": "GST",
+    "status": "verify"
+  },
+  {
+    "approval_name": "Udyam Registration",
+    "authority": "Ministry of MSME",
+    "business_types": [
+      "dairy",
+      "paneer",
+      "milk_processing",
+      "bakery",
+      "restaurant",
+      "food_manufacturing"
+    ],
+    "applicability": "business_dependent",
+    "conditions": [
+      "Relevant for enterprises seeking registration under the MSME framework"
+    ],
+    "documents": [],
+    "source": "Udyam",
+    "status": "verify"
+  },
+  {
+    "approval_name": "Fire Safety Approval / NOC",
+    "authority": "Relevant Fire Department",
+    "business_types": [
+      "dairy",
+      "paneer",
+      "milk_processing",
+      "bakery",
+      "restaurant",
+      "food_manufacturing"
+    ],
+    "applicability": "location_and_premises_dependent",
+    "conditions": [
+      "Applicability depends on premises, building, activity and local requirements"
+    ],
+    "documents": [],
+    "source": "Relevant State / Local Authority",
+    "status": "verify"
+  },
+  {
+    "approval_name": "Pollution Control Consent",
+    "authority": "Relevant State Pollution Control Board",
+    "business_types": [
+      "dairy",
+      "paneer",
+      "milk_processing",
+      "food_manufacturing"
+    ],
+    "applicability": "activity_and_scale_dependent",
+    "conditions": [
+      "Applicability depends on the nature and scale of the activity"
+    ],
+    "documents": [],
+    "source": "State Pollution Control Board",
+    "status": "verify"
+  }
+]

@@ -1,0 +1,82 @@
+[
+  {
+    "approval_name": "Local Trade / Business Licence",
+    "authority": "Relevant Local Authority",
+    "business_types": [
+      "hotel",
+      "resort",
+      "lodge"
+    ],
+    "applicability": "location_and_business_dependent",
+    "conditions": [
+      "May be required depending on the local authority and nature of the establishment."
+    ],
+    "documents": [],
+    "source": "Relevant Local Authority",
+    "status": "verify"
+  },
+  {
+    "approval_name": "Fire Safety Approval / NOC",
+    "authority": "Relevant Fire Department",
+    "business_types": [
+      "hotel",
+      "resort",
+      "lodge"
+    ],
+    "applicability": "premises_and_local_requirement_dependent",
+    "conditions": [
+      "Applicability depends on building, occupancy, premises and applicable local fire-safety requirements."
+    ],
+    "documents": [],
+    "source": "Relevant Fire Department",
+    "status": "verify"
+  },
+  {
+    "approval_name": "GST Registration",
+    "authority": "GST Authorities",
+    "business_types": [
+      "hotel",
+      "resort",
+      "lodge"
+    ],
+    "applicability": "conditional",
+    "conditions": [
+      "May be required depending on applicable GST registration rules and business circumstances."
+    ],
+    "documents": [],
+    "source": "GST",
+    "status": "verify"
+  },
+  {
+    "approval_name": "Udyam Registration",
+    "authority": "Ministry of MSME",
+    "business_types": [
+      "hotel",
+      "resort",
+      "lodge"
+    ],
+    "applicability": "optional_or_business_dependent",
+    "conditions": [
+      "Relevant for enterprises seeking registration under the MSME framework."
+    ],
+    "documents": [],
+    "source": "Udyam",
+    "status": "verify"
+  },
+  {
+    "approval_name": "FSSAI Registration / License",
+    "authority": "FSSAI",
+    "business_types": [
+      "hotel",
+      "resort",
+      "lodge"
+    ],
+    "applicability": "food_activity_dependent",
+    "conditions": [
+      "May apply if the establishment carries out food business activities such as preparing or serving food."
+    ],
+    "documents": [],
+    "source": "FSSAI",
+    "status": "verify"
+  }
+]
