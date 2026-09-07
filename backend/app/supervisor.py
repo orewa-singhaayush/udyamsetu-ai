@@ -30,10 +30,14 @@ def clean_approval_for_api(approval):
 
         "sources": [
             {
-                "document": chunk.get("document"),
+                "document": chunk.get("document", "Official Document"),
                 "page": chunk.get("page"),
                 "authority": chunk.get("authority"),
-                "source_url": chunk.get("source_url")
+                "domain": chunk.get("domain"),
+                "year": chunk.get("year"),
+                "source_url": chunk.get("source_url"),
+                "score": round(float(score), 3) if score is not None else None,
+                "excerpt": (chunk.get("text", "")[:350] + "...") if len(chunk.get("text", "")) > 350 else chunk.get("text", "")
             }
             for score, chunk in approval.get("rag_results", [])
         ]
@@ -197,24 +201,26 @@ def process_business(business_description):
         # ASK GEMMA
         # --------------------------------
 
-        if domain:
+        if domain in ["fire", "pollution"]:
+            answer = """Answer:
+Detailed regulatory guidance is not yet available for this approval in the configured knowledge base.
 
+Important:
+This approval is identified as potentially applicable based on your business profile, but dedicated regulatory documents for this domain will be connected in a later phase.
+"""
+        elif domain and search_results:
             answer = (
                 rag.ask_gemma(
                     rag_query,
                     context
                 )
             )
-
         else:
-
             answer = """Answer:
-No knowledge base is currently configured
-for this approval.
+Detailed regulatory guidance is not yet available for this approval.
 
 Important:
-This approval will be connected to its
-knowledge base in a later implementation stage.
+This approval will be connected to its knowledge base in a later implementation stage.
 """
 
 

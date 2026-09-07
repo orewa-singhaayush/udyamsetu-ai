@@ -13,9 +13,14 @@ TEXTILE_APPROVALS_PATH = "data/approvals/textile_approvals.json"
 # LOAD APPROVAL DATABASE
 # -----------------------------
 
-def load_approvals(file_path):
+from pathlib import Path
 
-    with open(file_path, "r", encoding="utf-8") as f:
+def load_approvals(file_path):
+    path = Path(file_path)
+    if not path.exists():
+        base_dir = Path(__file__).resolve().parent.parent
+        path = base_dir / file_path
+    with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 

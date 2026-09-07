@@ -1,6 +1,10 @@
 import json
 import subprocess
 import re
+import os
+import urllib.request
+import urllib.error
+from pathlib import Path
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
@@ -9,7 +13,8 @@ from sentence_transformers import SentenceTransformer
 # CONFIG
 # -----------------------------
 
-BASE_DATA_FOLDER = r"D:\udyamsetu-ai\backend\data"
+BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DATA_FOLDER = BASE_DIR / "data"
 
 DOMAIN_PATHS = {
     "food": "data/food/chunks.json",
@@ -25,8 +30,30 @@ DOMAIN_PATHS = {
     "udyam": "data/msme/chunks.json",
 }
 
-MODEL_NAME = "gemma3:4b"
-TOP_K = 5
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
+MODEL_NAME = os.environ.get("MODEL_NAME", "gemma3:4b")
+TOP_K = 3
+
+
+# -----------------------------
+# AI ANSWER SANITIZER
+# -----------------------------
+
+def clean_ai_answer(answer):
+    if not answer:
+        return answer
+    # Remove ANSI escape sequences (e.g. \x1B[3D\x1B[K)
+    answer = re.sub(
+        r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])',
+        '',
+        answer
+    )
+    # Filter non-printable control characters except newline and tab
+    answer = ''.join(
+        char for char in answer
+        if char in '\n\t\r' or ord(char) >= 32
+    )
+    return answer.strip()
 
 
 # -----------------------------
@@ -54,10 +81,11 @@ def load_knowledge_base(domain):
         print("Unknown domain:", domain)
         return []
 
-    chunks_path = DOMAIN_PATHS[domain]
+    raw_path = Path(DOMAIN_PATHS[domain])
+    chunks_path = (BASE_DIR / raw_path) if not raw_path.is_absolute() else raw_path
 
     print("\nLoading knowledge base:")
-    print(chunks_path)
+    print(str(chunks_path))
 
     try:
 
@@ -870,34 +898,69 @@ Important:
 
 
     # --------------------------------
-    # RUN GEMMA
+    # RUN GEMMA (HTTP API with Subprocess Fallback)
     # --------------------------------
 
-    result = subprocess.run(
-        [
-            "ollama",
-            "run",
-            MODEL_NAME,
-            prompt
-        ],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace"
-    )
+    answer = None
 
+    # 1. Try Ollama HTTP API first (fastest, cleanest, non-blocking)
+    try:
+        req_data = json.dumps({
+            "model": MODEL_NAME,
+            "prompt": prompt,
+            "stream": False,
+            "options": {
+                "temperature": 0.2
+            }
+        }).encode("utf-8")
 
-    if result.returncode != 0:
+        req = urllib.request.Request(
+            f"{OLLAMA_BASE_URL}/api/generate",
+            data=req_data,
+            headers={"Content-Type": "application/json"}
+        )
 
-        return f"""Answer:
+        with urllib.request.urlopen(req, timeout=90) as response:
+            resp_json = json.loads(response.read().decode("utf-8"))
+            answer = resp_json.get("response", "").strip()
+
+    except Exception as http_err:
+        # 2. Fallback to CLI ollama run with stdin=DEVNULL
+        try:
+            result = subprocess.run(
+                [
+                    "ollama",
+                    "run",
+                    MODEL_NAME,
+                    prompt
+                ],
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=60
+            )
+
+            if result.returncode != 0:
+                answer = f"""Answer:
 Unable to generate an answer from the local AI model.
 
 Important:
 {result.stderr.strip()}
 """
+            else:
+                answer = result.stdout.strip()
 
+        except Exception as cli_err:
+            answer = f"""Answer:
+Unable to connect to Ollama AI service.
 
-    return result.stdout.strip()
+Important:
+Please ensure Ollama is running with model {MODEL_NAME}.
+"""
+
+    return clean_ai_answer(answer)
 
 
 # -----------------------------
