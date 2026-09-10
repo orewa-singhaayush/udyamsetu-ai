@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
@@ -31,9 +31,11 @@ export default function ApprovalsPage() {
           setLoading(false);
         })
         .catch(() => {
+          setApprovals([]);
           setLoading(false);
         });
     } else {
+      setApprovals([]);
       setLoading(false);
     }
   }, [currentProject]);

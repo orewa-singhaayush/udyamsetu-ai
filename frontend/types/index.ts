@@ -1,4 +1,4 @@
-﻿export interface BusinessProfile {
+export interface BusinessProfile {
   business_type: string;
   business_subtype: string | null;
   industry: string;
@@ -105,4 +105,7 @@ export interface User {
   email: string;
   full_name: string;
   role: "entrepreneur" | "officer" | "admin";
+  phone?: string;
+  business_name?: string;
+  created_at?: string;
 }

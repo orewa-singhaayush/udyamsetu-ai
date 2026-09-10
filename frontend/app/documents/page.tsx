@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
@@ -38,8 +38,12 @@ export default function DocumentsPage() {
           setData(res);
           setLoading(false);
         })
-        .catch(() => setLoading(false));
+        .catch(() => {
+          setData(null);
+          setLoading(false);
+        });
     } else {
+      setData(null);
       setLoading(false);
     }
   };

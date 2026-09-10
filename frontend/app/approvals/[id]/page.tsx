@@ -1,6 +1,6 @@
-﻿"use client";
+"use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, Suspense } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
@@ -21,7 +21,7 @@ import {
   Loader2
 } from "lucide-react";
 
-export default function ApprovalDetailPage() {
+function ApprovalDetailContent() {
   const params = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -310,5 +310,13 @@ export default function ApprovalDetailPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function ApprovalDetailPage() {
+  return (
+    <Suspense fallback={<div className="py-20 text-center text-xs text-slate-400">Loading approval details...</div>}>
+      <ApprovalDetailContent />
+    </Suspense>
   );
 }

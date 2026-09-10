@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
@@ -45,16 +45,17 @@ export default function DashboardPage() {
       const projRes = await api.getProjects(user.id);
       setAllProjects(projRes.projects);
 
-      if (currentProject) {
-        const fullData = await api.getProject(currentProject.id);
-        setProjectData(fullData);
-      } else if (projRes.projects.length > 0) {
-        const first = projRes.projects[0];
-        setCurrentProject(first);
-        const fullData = await api.getProject(first.id);
-        setProjectData(fullData);
-      } else {
+      if (projRes.projects.length === 0) {
         setProjectData(null);
+        if (currentProject) setCurrentProject(null);
+      } else {
+        const matching = currentProject && projRes.projects.find((p) => p.id === currentProject.id);
+        const active = matching || projRes.projects[0];
+        if (!matching) {
+          setCurrentProject(active);
+        }
+        const fullData = await api.getProject(active.id);
+        setProjectData(fullData);
       }
       setLoading(false);
     } catch {

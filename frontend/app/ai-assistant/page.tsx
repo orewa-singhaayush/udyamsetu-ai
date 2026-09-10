@@ -1,6 +1,6 @@
-﻿"use client";
+"use client";
 
-import React, { useState } from "react";
+import React, { useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
@@ -22,7 +22,7 @@ interface Message {
   domain?: string;
 }
 
-export default function AIAssistantPage() {
+function AIAssistantContent() {
   const searchParams = useSearchParams();
   const { currentProject } = useAuth();
   const projectId = searchParams.get("projectId") || currentProject?.id;
@@ -198,5 +198,13 @@ export default function AIAssistantPage() {
         </button>
       </form>
     </div>
+  );
+}
+
+export default function AIAssistantPage() {
+  return (
+    <Suspense fallback={<div className="py-20 text-center text-xs text-slate-400">Loading AI assistant...</div>}>
+      <AIAssistantContent />
+    </Suspense>
   );
 }

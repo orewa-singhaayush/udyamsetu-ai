@@ -1,7 +1,8 @@
-﻿"use client";
+"use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { User, Project } from "@/types";
+import { api } from "@/lib/api";
 
 interface AuthContextType {
   user: User | null;
@@ -9,76 +10,128 @@ interface AuthContextType {
   setCurrentProject: (project: Project | null) => void;
   login: (email: string, pass: string) => Promise<boolean>;
   signup: (name: string, email: string, pass: string) => Promise<boolean>;
+  updateProfile: (data: Partial<User>) => Promise<boolean>;
   logout: () => void;
   isAuthenticated: boolean;
 }
 
-const DEFAULT_USER: User = {
-  id: "user-default-1",
-  email: "entrepreneur@udyamsetu.ai",
-  full_name: "Aayush Singh",
-  role: "entrepreneur",
-};
-
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(DEFAULT_USER);
+  const [user, setUser] = useState<User | null>(null);
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
 
   useEffect(() => {
-    // Check localStorage
-    const savedUser = localStorage.getItem("udyamsetu_user");
-    if (savedUser) {
+    // 1. Restore authenticated user
+    let activeUser: User | null = null;
+    const savedUserStr = localStorage.getItem("udyamsetu_user");
+    if (savedUserStr) {
       try {
-        setUser(JSON.parse(savedUser));
+        activeUser = JSON.parse(savedUserStr);
+        setUser(activeUser);
       } catch {
-        setUser(DEFAULT_USER);
+        localStorage.removeItem("udyamsetu_user");
+        setUser(null);
       }
     } else {
-      localStorage.setItem("udyamsetu_user", JSON.stringify(DEFAULT_USER));
+      setUser(null);
     }
 
-    const savedProject = localStorage.getItem("udyamsetu_project");
-    if (savedProject) {
+    // 2. Restore project ONLY if it belongs to the active user
+    const savedProjectStr = localStorage.getItem("udyamsetu_project");
+    if (savedProjectStr) {
       try {
-        setCurrentProject(JSON.parse(savedProject));
+        const savedProj = JSON.parse(savedProjectStr);
+        if (activeUser && savedProj && savedProj.user_id === activeUser.id) {
+          setCurrentProject(savedProj);
+        } else {
+          localStorage.removeItem("udyamsetu_project");
+          setCurrentProject(null);
+        }
       } catch {
-        // ignore
+        localStorage.removeItem("udyamsetu_project");
+        setCurrentProject(null);
       }
+    } else {
+      setCurrentProject(null);
     }
   }, []);
 
   const handleSetCurrentProject = (project: Project | null) => {
-    setCurrentProject(project);
     if (project) {
-      localStorage.setItem("udyamsetu_project", JSON.stringify(project));
+      // Validate that project belongs to active user before storing
+      if (user && project.user_id === user.id) {
+        setCurrentProject(project);
+        localStorage.setItem("udyamsetu_project", JSON.stringify(project));
+      }
     } else {
+      setCurrentProject(null);
       localStorage.removeItem("udyamsetu_project");
     }
   };
 
-  const login = async (email: string, _pass: string): Promise<boolean> => {
-    const newUser: User = {
-      id: "user-default-1",
-      email: email || "entrepreneur@udyamsetu.ai",
-      full_name: email.split("@")[0] || "Entrepreneur",
-      role: "entrepreneur",
+  const login = async (email: string, pass: string): Promise<boolean> => {
+    const userRes = await api.login(email, pass);
+    const loggedInUser: User = {
+      id: userRes.id,
+      email: userRes.email,
+      full_name: userRes.full_name,
+      role: userRes.role || "entrepreneur",
+      phone: userRes.phone || (userRes.id === "user-default-1" ? "+91 98765 43210" : ""),
+      business_name: userRes.business_name || (userRes.id === "user-default-1" ? "Singh Dairy & Agro Industries" : ""),
     };
-    setUser(newUser);
-    localStorage.setItem("udyamsetu_user", JSON.stringify(newUser));
+
+    setUser(loggedInUser);
+    localStorage.setItem("udyamsetu_user", JSON.stringify(loggedInUser));
+
+    // Clear or revalidate saved project for this user
+    const savedProjectStr = localStorage.getItem("udyamsetu_project");
+    if (savedProjectStr) {
+      try {
+        const savedProj = JSON.parse(savedProjectStr);
+        if (savedProj.user_id !== loggedInUser.id) {
+          localStorage.removeItem("udyamsetu_project");
+          setCurrentProject(null);
+        } else {
+          setCurrentProject(savedProj);
+        }
+      } catch {
+        localStorage.removeItem("udyamsetu_project");
+        setCurrentProject(null);
+      }
+    } else {
+      setCurrentProject(null);
+    }
+
     return true;
   };
 
-  const signup = async (name: string, email: string, _pass: string): Promise<boolean> => {
+  const signup = async (name: string, email: string, pass: string): Promise<boolean> => {
+    const userRes = await api.signup(name, email, pass);
     const newUser: User = {
-      id: `user-${Date.now()}`,
-      email: email,
-      full_name: name || "Entrepreneur",
-      role: "entrepreneur",
+      id: userRes.id,
+      email: userRes.email,
+      full_name: userRes.full_name,
+      role: userRes.role || "entrepreneur",
     };
+
     setUser(newUser);
     localStorage.setItem("udyamsetu_user", JSON.stringify(newUser));
+
+    // Newly registered user has 0 projects
+    localStorage.removeItem("udyamsetu_project");
+    setCurrentProject(null);
+    return true;
+  };
+
+  const updateProfile = async (data: Partial<User>): Promise<boolean> => {
+    if (!user) return false;
+    const updated: User = {
+      ...user,
+      ...data,
+    };
+    setUser(updated);
+    localStorage.setItem("udyamsetu_user", JSON.stringify(updated));
     return true;
   };
 
@@ -97,6 +150,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setCurrentProject: handleSetCurrentProject,
         login,
         signup,
+        updateProfile,
         logout,
         isAuthenticated: !!user,
       }}

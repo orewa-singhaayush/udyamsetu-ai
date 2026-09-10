@@ -1,6 +1,6 @@
-﻿"use client";
+"use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -18,7 +18,7 @@ import {
   ArrowRight
 } from "lucide-react";
 
-export default function AnalyzePage() {
+function AnalyzeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, setCurrentProject } = useAuth();
@@ -85,6 +85,11 @@ export default function AnalyzePage() {
 
   const handleSaveAsProject = async () => {
     if (!result || !projectName.trim()) return;
+    if (!user) {
+      alert("Please log in or create an account to save your business venture.");
+      router.push("/login");
+      return;
+    }
     setSavingProject(true);
 
     try {
@@ -92,7 +97,7 @@ export default function AnalyzePage() {
         name: projectName.trim(),
         description: input,
         analysis_result: result,
-        user_id: user?.id || "user-default-1",
+        user_id: user.id,
       });
 
       // Fetch newly created project to set in context
@@ -278,5 +283,13 @@ export default function AnalyzePage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function AnalyzePage() {
+  return (
+    <Suspense fallback={<div className="py-20 text-center text-xs text-slate-400">Loading analysis workspace...</div>}>
+      <AnalyzeContent />
+    </Suspense>
   );
 }

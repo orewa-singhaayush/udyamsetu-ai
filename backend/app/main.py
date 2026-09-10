@@ -1,13 +1,14 @@
-﻿import os
+import os
 import re
 import json
 import uuid
 import shutil
+import sqlite3
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -55,8 +56,17 @@ app.add_middleware(
 class BusinessRequest(BaseModel):
     business_description: str
 
+class LoginRequest(BaseModel):
+    email: str
+    password: Optional[str] = None
+
+class RegisterRequest(BaseModel):
+    email: str
+    full_name: str
+    password: Optional[str] = None
+
 class CreateProjectRequest(BaseModel):
-    user_id: Optional[str] = "user-default-1"
+    user_id: Optional[str] = None
     name: str
     description: Optional[str] = ""
     analysis_result: Optional[Dict[str, Any]] = None
@@ -72,6 +82,77 @@ class UpdateApprovalStatusRequest(BaseModel):
 class AskAIRequest(BaseModel):
     project_id: Optional[str] = None
     question: str
+
+
+# --------------------------------
+# AUTH & OWNERSHIP HELPERS
+# --------------------------------
+
+def get_current_user(
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None)
+) -> str:
+    """
+    Extracts authenticated user ID from X-User-Id or Authorization Bearer header.
+    Validates that user exists in SQLite database.
+    """
+    user_id = x_user_id
+    if not user_id and authorization:
+        if authorization.startswith("Bearer "):
+            user_id = authorization.split(" ", 1)[1].strip()
+        else:
+            user_id = authorization.strip()
+
+    if not user_id:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required: Missing X-User-Id or Authorization header."
+        )
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM users WHERE id = ?", (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(
+            status_code=401,
+            detail=f"Invalid user session: User '{user_id}' does not exist."
+        )
+
+    return user_id
+
+
+def get_optional_current_user(
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    authorization: Optional[str] = Header(None)
+) -> Optional[str]:
+    user_id = x_user_id
+    if not user_id and authorization:
+        if authorization.startswith("Bearer "):
+            user_id = authorization.split(" ", 1)[1].strip()
+        else:
+            user_id = authorization.strip()
+    return user_id
+
+
+def verify_project_ownership(project_id: str, user_id: str, conn: sqlite3.Connection) -> dict:
+    """
+    Verifies that a project exists and belongs to the authenticated user.
+    Raises 404 if project not found, 403 if project belongs to another user.
+    """
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM projects WHERE id = ?", (project_id,))
+    row = cursor.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Project not found.")
+    proj = dict(row)
+    if proj["user_id"] != user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Forbidden: You do not have permission to access this project."
+        )
+    return proj
 
 
 # --------------------------------
@@ -96,6 +177,79 @@ def health_check():
 
 
 # --------------------------------
+# AUTHENTICATION API
+# --------------------------------
+
+@app.post("/api/auth/login")
+def login_user(req: LoginRequest):
+    email = req.email.strip().lower()
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, email, full_name, role FROM users WHERE LOWER(email) = ?", (email,))
+    user = cursor.fetchone()
+    if not user:
+        if email == "entrepreneur@udyamsetu.ai":
+            cursor.execute("""
+            INSERT OR IGNORE INTO users (id, email, full_name, role)
+            VALUES ('user-default-1', 'entrepreneur@udyamsetu.ai', 'Aayush Singh', 'entrepreneur')
+            """)
+            conn.commit()
+            cursor.execute("SELECT id, email, full_name, role FROM users WHERE id = 'user-default-1'")
+            user = cursor.fetchone()
+        else:
+            conn.close()
+            raise HTTPException(status_code=401, detail="Invalid credentials or account does not exist. Please sign up.")
+
+    user_data = dict(user)
+    conn.close()
+    return user_data
+
+
+@app.post("/api/auth/register")
+def register_user(req: RegisterRequest):
+    email = req.email.strip().lower()
+    full_name = req.full_name.strip()
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required.")
+    if not full_name:
+        raise HTTPException(status_code=400, detail="Full name is required.")
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM users WHERE LOWER(email) = ?", (email,))
+    if cursor.fetchone():
+        conn.close()
+        raise HTTPException(status_code=400, detail="An account with this email already exists.")
+
+    new_user_id = f"user-{uuid.uuid4().hex[:8]}"
+    cursor.execute("""
+    INSERT INTO users (id, email, full_name, role)
+    VALUES (?, ?, ?, 'entrepreneur')
+    """, (new_user_id, email, full_name))
+    conn.commit()
+    conn.close()
+
+    return {
+        "id": new_user_id,
+        "email": email,
+        "full_name": full_name,
+        "role": "entrepreneur"
+    }
+
+
+@app.get("/api/auth/me")
+def get_current_user_profile(user_id: str = Depends(get_current_user)):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, email, full_name, role FROM users WHERE id = ?", (user_id,))
+    user = cursor.fetchone()
+    conn.close()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+    return dict(user)
+
+
+# --------------------------------
 # CORE AI ANALYSIS (PRESERVED)
 # --------------------------------
 
@@ -115,7 +269,7 @@ def analyze_business(request: BusinessRequest):
 # --------------------------------
 
 @app.get("/api/projects")
-def list_projects(user_id: str = "user-default-1"):
+def list_projects(current_user_id: str = Depends(get_current_user)):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("""
@@ -125,7 +279,7 @@ def list_projects(user_id: str = "user-default-1"):
     LEFT JOIN business_profiles bp ON bp.project_id = p.id
     WHERE p.user_id = ?
     ORDER BY p.created_at DESC
-    """, (user_id,))
+    """, (current_user_id,))
     rows = cursor.fetchall()
     
     projects = []
@@ -170,23 +324,19 @@ def list_projects(user_id: str = "user-default-1"):
 
 
 @app.post("/api/projects")
-def create_project(request: CreateProjectRequest):
+def create_project(request: CreateProjectRequest, current_user_id: str = Depends(get_current_user)):
     project_id = f"proj-{uuid.uuid4().hex[:8]}"
     conn = get_db()
     cursor = conn.cursor()
 
     try:
-        # Ensure user exists
-        cursor.execute("SELECT id FROM users WHERE id = ?", (request.user_id,))
-        if not cursor.fetchone():
-            cursor.execute("INSERT INTO users (id, email, full_name) VALUES (?, ?, ?)",
-                           (request.user_id, f"{request.user_id}@udyamsetu.ai", "Entrepreneur"))
+        user_id = current_user_id
 
         # Insert project
         cursor.execute("""
         INSERT INTO projects (id, user_id, name, description, status)
         VALUES (?, ?, ?, ?, 'active')
-        """, (project_id, request.user_id, request.name, request.description))
+        """, (project_id, user_id, request.name, request.description))
 
         analysis = request.analysis_result
         if analysis:
@@ -225,7 +375,7 @@ def create_project(request: CreateProjectRequest):
                     app_name,
                     app_data.get("authority"),
                     app_data.get("applicability", "potentially_applicable"),
-                    app_data.get("rag_query"),
+                    app_data.get("ai_reason"),
                     app_data.get("rag_domain"),
                     app_data.get("rag_query"),
                     app_data.get("rag_answer"),
@@ -249,7 +399,7 @@ def create_project(request: CreateProjectRequest):
                         pd_id,
                         project_id,
                         rd["id"],
-                        request.user_id,
+                        user_id,
                         rd["document_name"],
                         rd["document_type"],
                         app_name
@@ -266,15 +416,10 @@ def create_project(request: CreateProjectRequest):
 
 
 @app.get("/api/projects/{project_id}")
-def get_project(project_id: str):
+def get_project(project_id: str, current_user_id: str = Depends(get_current_user)):
     conn = get_db()
+    proj = verify_project_ownership(project_id, current_user_id, conn)
     cursor = conn.cursor()
-
-    cursor.execute("SELECT * FROM projects WHERE id = ?", (project_id,))
-    proj = cursor.fetchone()
-    if not proj:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Project not found.")
 
     cursor.execute("SELECT * FROM business_profiles WHERE project_id = ?", (project_id,))
     bp = cursor.fetchone()
@@ -304,7 +449,7 @@ def get_project(project_id: str):
     conn.close()
 
     return {
-        "project": dict(proj),
+        "project": proj,
         "business_profile": business_profile,
         "approvals": approvals,
         "documents": documents,
@@ -319,13 +464,10 @@ def get_project(project_id: str):
 
 
 @app.delete("/api/projects/{project_id}")
-def delete_project(project_id: str):
+def delete_project(project_id: str, current_user_id: str = Depends(get_current_user)):
     conn = get_db()
+    verify_project_ownership(project_id, current_user_id, conn)
     cursor = conn.cursor()
-    cursor.execute("SELECT id FROM projects WHERE id = ?", (project_id,))
-    if not cursor.fetchone():
-        conn.close()
-        raise HTTPException(status_code=404, detail="Project not found.")
     
     # Delete uploaded directory if exists
     proj_upload_dir = UPLOADS_DIR / project_id
@@ -343,8 +485,9 @@ def delete_project(project_id: str):
 # --------------------------------
 
 @app.get("/api/projects/{project_id}/approvals")
-def get_project_approvals(project_id: str):
+def get_project_approvals(project_id: str, current_user_id: str = Depends(get_current_user)):
     conn = get_db()
+    verify_project_ownership(project_id, current_user_id, conn)
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM project_approvals WHERE project_id = ? ORDER BY created_at ASC", (project_id,))
     rows = cursor.fetchall()
@@ -359,12 +502,18 @@ def get_project_approvals(project_id: str):
 
 
 @app.patch("/api/projects/{project_id}/approvals/{approval_id}")
-def update_approval_status(project_id: str, approval_id: str, req: UpdateApprovalStatusRequest):
+def update_approval_status(
+    project_id: str,
+    approval_id: str,
+    req: UpdateApprovalStatusRequest,
+    current_user_id: str = Depends(get_current_user)
+):
     allowed = ["identified", "in_progress", "completed", "not_applicable", "review_required"]
     if req.status not in allowed:
         raise HTTPException(status_code=400, detail=f"Invalid status. Allowed: {allowed}")
 
     conn = get_db()
+    verify_project_ownership(project_id, current_user_id, conn)
     cursor = conn.cursor()
     cursor.execute("""
     UPDATE project_approvals
@@ -385,8 +534,9 @@ def update_approval_status(project_id: str, approval_id: str, req: UpdateApprova
 # --------------------------------
 
 @app.get("/api/projects/{project_id}/documents")
-def get_project_documents(project_id: str):
+def get_project_documents(project_id: str, current_user_id: str = Depends(get_current_user)):
     conn = get_db()
+    verify_project_ownership(project_id, current_user_id, conn)
     cursor = conn.cursor()
     cursor.execute("""
     SELECT pd.*, rd.description as requirement_description, rd.is_required, rd.source_url as requirement_source_url
@@ -420,12 +570,17 @@ def get_project_documents(project_id: str):
 async def upload_document(
     project_id: str,
     document_id: str = Form(...),
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    current_user_id: str = Depends(get_current_user)
 ):
+    conn = get_db()
+    verify_project_ownership(project_id, current_user_id, conn)
+
     # Validate file format
     allowed_extensions = {".pdf", ".jpg", ".jpeg", ".png"}
     ext = Path(file.filename).suffix.lower()
     if ext not in allowed_extensions:
+        conn.close()
         raise HTTPException(
             status_code=400,
             detail=f"Invalid file type '{ext}'. Only PDF, JPG, and PNG files are accepted."
@@ -436,6 +591,7 @@ async def upload_document(
     content = await file.read()
     file_size = len(content)
     if file_size > MAX_SIZE:
+        conn.close()
         raise HTTPException(status_code=400, detail="File exceeds maximum allowed size of 10MB.")
 
     # Save to disk
@@ -449,7 +605,6 @@ async def upload_document(
     file_url = f"/api/projects/{project_id}/documents/{document_id}/file"
 
     # Update database
-    conn = get_db()
     cursor = conn.cursor()
     cursor.execute("""
     UPDATE project_documents
@@ -481,8 +636,13 @@ async def upload_document(
 
 
 @app.get("/api/projects/{project_id}/documents/{document_id}/file")
-def download_document(project_id: str, document_id: str):
+def download_document(
+    project_id: str,
+    document_id: str,
+    current_user_id: str = Depends(get_current_user)
+):
     conn = get_db()
+    verify_project_ownership(project_id, current_user_id, conn)
     cursor = conn.cursor()
     cursor.execute("""
     SELECT file_name, mime_type FROM project_documents WHERE id = ? AND project_id = ? AND status = 'uploaded'
@@ -506,7 +666,10 @@ def download_document(project_id: str, document_id: str):
 # --------------------------------
 
 @app.post("/api/ai/ask")
-def ask_assistant(request: AskAIRequest):
+def ask_assistant(
+    request: AskAIRequest,
+    current_user_id: Optional[str] = Depends(get_optional_current_user)
+):
     question = request.question.strip()
     if not question:
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
@@ -517,6 +680,8 @@ def ask_assistant(request: AskAIRequest):
     
     if request.project_id:
         conn = get_db()
+        if current_user_id:
+            verify_project_ownership(request.project_id, current_user_id, conn)
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM business_profiles WHERE project_id = ?", (request.project_id,))
         bp = cursor.fetchone()

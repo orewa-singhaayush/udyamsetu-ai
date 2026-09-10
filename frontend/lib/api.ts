@@ -1,4 +1,4 @@
-﻿import { AnalysisResult, Project, ProjectDocument, DocumentListResponse, Approval } from "@/types";
+import { AnalysisResult, Project, ProjectDocument, DocumentListResponse, Approval } from "@/types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -13,12 +13,30 @@ class ApiError extends Error {
 
 async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
+
+  // Automatically inject active user's identity header if available
+  const authHeaders: Record<string, string> = {};
+  if (typeof window !== "undefined") {
+    try {
+      const savedUserStr = localStorage.getItem("udyamsetu_user");
+      if (savedUserStr) {
+        const savedUser = JSON.parse(savedUserStr);
+        if (savedUser?.id) {
+          authHeaders["X-User-Id"] = savedUser.id;
+        }
+      }
+    } catch {
+      // ignore JSON parse error
+    }
+  }
+
   try {
     const res = await fetch(url, {
       ...options,
       headers: {
         "Accept": "application/json",
         ...(options?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+        ...authHeaders,
         ...options?.headers,
       },
     });
@@ -47,6 +65,25 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  // Authentication
+  login: async (email: string, password?: string): Promise<any> => {
+    return request("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+  },
+
+  signup: async (name: string, email: string, password?: string): Promise<any> => {
+    return request("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ full_name: name, email, password }),
+    });
+  },
+
+  getMe: async (): Promise<any> => {
+    return request("/api/auth/me");
+  },
+
   // Health
   checkHealth: async () => {
     return request<{ status: string; service: string; model: string }>("/health");
@@ -60,9 +97,9 @@ export const api = {
     });
   },
 
-  // Projects
-  getProjects: async (userId: string = "user-default-1"): Promise<{ projects: Project[] }> => {
-    return request<{ projects: Project[] }>(`/api/projects?user_id=${encodeURIComponent(userId)}`);
+  // Projects (Scoped to authenticated user)
+  getProjects: async (_userId?: string): Promise<{ projects: Project[] }> => {
+    return request<{ projects: Project[] }>("/api/projects");
   },
 
   createProject: async (data: {

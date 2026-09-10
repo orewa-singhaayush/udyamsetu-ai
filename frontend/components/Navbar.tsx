@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
@@ -13,6 +13,7 @@ import {
   ChevronDown, 
   LogOut, 
   User, 
+  Settings,
   ShieldCheck,
   CheckCircle2
 } from "lucide-react";
@@ -30,11 +31,21 @@ export default function Navbar() {
       api.getProjects(user.id)
         .then((res) => {
           setProjects(res.projects);
-          if (!currentProject && res.projects.length > 0) {
+          if (res.projects.length === 0) {
+            setCurrentProject(null);
+          } else if (currentProject && !res.projects.some((p) => p.id === currentProject.id)) {
+            setCurrentProject(res.projects[0]);
+          } else if (!currentProject && res.projects.length > 0) {
             setCurrentProject(res.projects[0]);
           }
         })
-        .catch(() => {});
+        .catch(() => {
+          setProjects([]);
+          setCurrentProject(null);
+        });
+    } else {
+      setProjects([]);
+      setCurrentProject(null);
     }
   }, [user]);
 
@@ -136,30 +147,48 @@ export default function Navbar() {
                 </button>
 
                 {userMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white text-slate-900 rounded-xl shadow-xl border border-slate-200 py-1.5 z-50">
-                    <div className="px-3 py-2 border-b border-slate-100">
-                      <p className="text-xs font-bold text-slate-800 truncate">{user?.full_name}</p>
+                  <div className="absolute right-0 mt-2 w-56 bg-white text-slate-900 rounded-2xl shadow-xl border border-slate-200 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
+                    <div className="px-3.5 py-2.5 border-b border-slate-100">
+                      <p className="text-xs font-bold text-slate-800 truncate">{user?.full_name || "Entrepreneur"}</p>
                       <p className="text-[11px] text-slate-500 truncate">{user?.email}</p>
+                      <span className="inline-block mt-1 text-[10px] font-bold uppercase tracking-wider bg-orange-50 text-brand-orange border border-orange-200/60 px-2 py-0.5 rounded-md">
+                        {user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : "Entrepreneur"}
+                      </span>
                     </div>
-                    <Link
-                      href="/profile"
-                      onClick={() => setUserMenuOpen(false)}
-                      className="flex items-center space-x-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50"
-                    >
-                      <User className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Profile</span>
-                    </Link>
-                    <button
-                      onClick={() => {
-                        logout();
-                        setUserMenuOpen(false);
-                        router.push("/");
-                      }}
-                      className="w-full text-left flex items-center space-x-2 px-3 py-2 text-xs text-red-600 hover:bg-red-50"
-                    >
-                      <LogOut className="w-3.5 h-3.5" />
-                      <span>Logout</span>
-                    </button>
+
+                    <div className="py-1">
+                      <Link
+                        href="/profile"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center space-x-2.5 px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
+                      >
+                        <User className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Profile</span>
+                      </Link>
+
+                      <Link
+                        href="/settings"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center space-x-2.5 px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
+                      >
+                        <Settings className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Settings</span>
+                      </Link>
+                    </div>
+
+                    <div className="border-t border-slate-100 pt-1">
+                      <button
+                        onClick={() => {
+                          logout();
+                          setUserMenuOpen(false);
+                          router.push("/");
+                        }}
+                        className="w-full text-left flex items-center space-x-2.5 px-3.5 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        <span>Sign Out</span>
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
