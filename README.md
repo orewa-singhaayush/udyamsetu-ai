@@ -1,3 +1,5 @@
+<p align="center"> <img src="./Logo.png" alt="UdyamSetu AI Logo" width="300"/> </p>
+
 # UdyamSetu AI
 
 ## AI-Powered Business Approval & Compliance Assistant
